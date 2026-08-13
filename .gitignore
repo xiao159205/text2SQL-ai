@@ -1,0 +1,30 @@
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.iml
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+
+# Java / Maven build output
+**/target/
+*.log
+
+# Frontend dependencies and build output
+**/node_modules/
+**/dist/
+*.local
+
+# Runtime uploads: keep only the directory placeholder
+channel-antifraud-ai-frontend/src/asserts/*
+!channel-antifraud-ai-frontend/src/asserts/.gitkeep
+
+# Local datasets
+channel-antifraud-ai_backend/data/
+

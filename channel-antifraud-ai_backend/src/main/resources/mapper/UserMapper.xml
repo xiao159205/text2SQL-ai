@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xym.antifraud.mapper.UserMapper">
+
+    <resultMap id="userMap" type="com.xym.antifraud.entity.User">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="phone" column="phone"/>
+        <result property="password" column="password"/>
+        <result property="avatarPath" column="avatar_path"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByPhone" resultMap="userMap">
+        SELECT id, username, phone, password, avatar_path, created_at, updated_at
+        FROM users
+        WHERE phone = #{phone}
+        LIMIT 1
+    </select>
+
+    <select id="countByPhone" resultType="int">
+        SELECT COUNT(1) FROM users WHERE phone = #{phone}
+    </select>
+
+    <select id="countByUsername" resultType="int">
+        SELECT COUNT(1) FROM users WHERE username = #{username}
+    </select>
+
+    <insert id="insert" parameterType="com.xym.antifraud.entity.User"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (username, phone, password, avatar_path)
+        VALUES (#{username}, #{phone}, #{password}, #{avatarPath})
+    </insert>
+</mapper>

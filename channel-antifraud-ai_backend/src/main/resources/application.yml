@@ -1,0 +1,66 @@
+server:
+  port: 8080
+  servlet:
+    jsp:
+      registered: false
+
+
+spring:
+  application:
+    name: channel-antifraud-ai-backend
+  http:
+    client:
+      factory: jdk
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://hadoop105:3306/cfrm_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:xiao159205}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 5000
+      read-only: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  ai:
+    openai:
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      api-key: sk-40a13f1437b540728c77a12fcf92461d
+      chat:
+        completions-path: /chat/completions
+        options:
+          model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
+
+text2sql:
+  hive:
+    url: ${HIVE_URL:jdbc:hive2://hadoop105:10000/default}
+    username: ${HIVE_USERNAME:xym}
+    password: ${HIVE_PASSWORD:}
+    driver-class-name: org.apache.hive.jdbc.HiveDriver
+    maximum-pool-size: ${HIVE_MAXIMUM_POOL_SIZE:5}
+    connection-timeout: ${HIVE_CONNECTION_TIMEOUT:10000}
+  # 空数组表示读取当前数据库中的全部表；生产环境建议配置白名单
+  allowed-tables: []
+  schema-cache-seconds: 300
+  max-schema-columns: 5000
+  max-result-rows: 1000
+  max-conditions: 30
+  max-joins: 5
+  # 开发环境全链路日志；生产环境应关闭完整Prompt和结果数据
+  log-full-prompt: true
+  log-model-response: true
+  log-query-results: true
+  max-logged-result-rows: 20
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId:-system}] %logger{40} - %msg%n"
+  level:
+    com.xym.antifraud: INFO
+
+app:
+  storage:
+    # 头像写入前端源码目录；数据库仅保存 src/asserts/<文件名>。
+    avatar-directory: ${AVATAR_DIRECTORY:../channel-antifraud-ai-frontend/src/asserts}

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xym.antifraud.mapper.SchemaConfigMapper">
+
+    <resultMap id="tableRuleMap" type="com.xym.antifraud.entity.SchemaTableRule">
+        <constructor>
+            <arg column="table_name" javaType="java.lang.String"/>
+            <arg column="visible" javaType="_int"/>
+            <arg column="custom_comment" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="fieldRuleMap" type="com.xym.antifraud.entity.SchemaFieldRule">
+        <constructor>
+            <arg column="table_name" javaType="java.lang.String"/>
+            <arg column="field_name" javaType="java.lang.String"/>
+            <arg column="visible" javaType="_int"/>
+            <arg column="custom_comment" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <insert id="upsertTableRule">
+        INSERT INTO schema_table_config (database_type, table_name, visible, custom_comment)
+        VALUES (#{databaseType}, #{tableName}, #{visible}, #{customComment})
+        ON DUPLICATE KEY UPDATE
+            visible = VALUES(visible),
+            custom_comment = VALUES(custom_comment)
+    </insert>
+
+    <insert id="upsertFieldRule">
+        INSERT INTO schema_field_config
+            (database_type, table_name, field_name, visible, custom_comment)
+        VALUES
+            (#{databaseType}, #{tableName}, #{fieldName}, #{visible}, #{customComment})
+        ON DUPLICATE KEY UPDATE
+            visible = VALUES(visible),
+            custom_comment = VALUES(custom_comment)
+    </insert>
+
+    <select id="selectTableRules" resultMap="tableRuleMap">
+        SELECT table_name, visible, custom_comment
+        FROM schema_table_config
+        WHERE database_type = #{databaseType}
+    </select>
+
+    <select id="selectFieldRules" resultMap="fieldRuleMap">
+        SELECT table_name, field_name, visible, custom_comment
+        FROM schema_field_config
+        WHERE database_type = #{databaseType}
+    </select>
+</mapper>
