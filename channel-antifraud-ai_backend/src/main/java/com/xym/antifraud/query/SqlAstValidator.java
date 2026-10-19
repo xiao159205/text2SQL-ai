@@ -1,6 +1,8 @@
 package com.xym.antifraud.query;
 
 import com.xym.antifraud.config.AntifraudProperties;
+import com.xym.antifraud.datasource.DatabaseContext;
+import com.xym.antifraud.datasource.DatabaseType;
 import com.xym.antifraud.query.ast.SqlQueryPlan;
 import com.xym.antifraud.schema.FieldDefinition;
 import com.xym.antifraud.schema.SchemaCatalog;
@@ -191,7 +193,9 @@ public class SqlAstValidator {
     }
 
     private void validateAggregateField(Aggregate aggregate, FieldDefinition field) {
-        if (Set.of(Aggregate.SUM, Aggregate.AVG).contains(aggregate) && !field.isNumeric()) {
+        if (Set.of(Aggregate.SUM, Aggregate.AVG).contains(aggregate)
+                && DatabaseContext.current() != DatabaseType.HIVE
+                && !field.isNumeric()) {
             throw new IllegalArgumentException(aggregate + "只能用于数值字段: " + field.columnName());
         }
     }

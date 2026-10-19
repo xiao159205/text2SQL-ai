@@ -69,6 +69,14 @@ public class AvatarStorageService {
         }
     }
 
+    public void deletePublicPathQuietly(String publicPath) {
+        if (publicPath == null || !publicPath.startsWith(AVATAR_RELATIVE_DIRECTORY)) {
+            return;
+        }
+        deleteQuietly(new StoredAvatar(publicPath,
+                publicPath.substring(AVATAR_RELATIVE_DIRECTORY.length())));
+    }
+
     private void ensureInsideStorage(Path target) {
         if (!target.startsWith(avatarDirectory)) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "INVALID_FILE_NAME", "文件名不合法");

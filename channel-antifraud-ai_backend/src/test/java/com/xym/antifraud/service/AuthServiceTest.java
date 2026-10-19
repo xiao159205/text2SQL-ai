@@ -25,6 +25,7 @@ class AuthServiceTest {
     private UserMapper userMapper;
     private AvatarStorageService storageService;
     private PasswordEncoder passwordEncoder;
+    private UserSessionService userSessionService;
     private AuthService authService;
 
     @BeforeEach
@@ -32,7 +33,9 @@ class AuthServiceTest {
         userMapper = mock(UserMapper.class);
         storageService = mock(AvatarStorageService.class);
         passwordEncoder = new BCryptPasswordEncoder(4);
-        authService = new AuthService(userMapper, passwordEncoder, storageService);
+        userSessionService = mock(UserSessionService.class);
+        when(userSessionService.create(any())).thenReturn("test-session-token");
+        authService = new AuthService(userMapper, passwordEncoder, storageService, userSessionService);
     }
 
     @Test
@@ -76,7 +79,7 @@ class AuthServiceTest {
         user.setPhone("13900139000");
         user.setPassword(passwordEncoder.encode("secret123"));
         user.setAvatarPath("src/asserts/login.png");
-        when(userMapper.selectByPhone("13900139000")).thenReturn(user);
+        when(userMapper.selectByAccount("13900139000")).thenReturn(user);
 
         AuthResponse response = authService.login(new LoginRequest("13900139000", "secret123"));
 
@@ -85,15 +88,30 @@ class AuthServiceTest {
     }
 
     @Test
+    void logsInWithUsernameAndBcryptPassword() {
+        User user = new User();
+        user.setId(9L);
+        user.setUsername("登录用户");
+        user.setPhone("13900139000");
+        user.setPassword(passwordEncoder.encode("secret123"));
+        when(userMapper.selectByAccount("登录用户")).thenReturn(user);
+
+        AuthResponse response = authService.login(new LoginRequest("登录用户", "secret123"));
+
+        assertThat(response.id()).isEqualTo(9L);
+        assertThat(response.username()).isEqualTo("登录用户");
+    }
+
+    @Test
     void rejectsWrongPassword() {
         User user = new User();
         user.setPassword(passwordEncoder.encode("correct-password"));
-        when(userMapper.selectByPhone("13900139000")).thenReturn(user);
+        when(userMapper.selectByAccount("13900139000")).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(
                 new LoginRequest("13900139000", "wrong-password")))
                 .isInstanceOf(BusinessException.class)
-                .hasMessage("手机号或密码错误");
+                .hasMessage("账号或密码错误");
     }
 
     private RegisterRequest registerRequest() {

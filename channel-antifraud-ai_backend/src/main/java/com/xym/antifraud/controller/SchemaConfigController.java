@@ -74,6 +74,14 @@ public class SchemaConfigController {
         return Map.of("code", 0);
     }
 
+    @PutMapping("/tables/batch-visibility")
+    public Map<String, Object> saveTableVisibilityBatch(@RequestBody TableBatchRequest request) {
+        DatabaseType databaseType = DatabaseType.from(request.database());
+        configService.saveTableVisibilityBatch(databaseType, request.tableNames(), request.visible());
+        schemaCatalog.evictAll();
+        return Map.of("code", 0, "updated", request.tableNames().size());
+    }
+
     @PutMapping("/tables/{tableName}/fields/{fieldName}")
     public Map<String, Object> saveFieldRule(@PathVariable String tableName,
                                              @PathVariable String fieldName,
@@ -94,6 +102,17 @@ public class SchemaConfigController {
                 request.visible(), configuredComment);
         schemaCatalog.evictAll();
         return Map.of("code", 0);
+    }
+
+    @PutMapping("/tables/{tableName}/fields/batch-visibility")
+    public Map<String, Object> saveFieldVisibilityBatch(
+            @PathVariable String tableName,
+            @RequestBody FieldBatchRequest request) {
+        DatabaseType databaseType = DatabaseType.from(request.database());
+        configService.saveFieldVisibilityBatch(databaseType, tableName,
+                request.fieldNames(), request.visible());
+        schemaCatalog.evictAll();
+        return Map.of("code", 0, "updated", request.fieldNames().size());
     }
 
     /** 预览当前生效的、发给大模型的 Schema 文本。 */
@@ -133,6 +152,18 @@ public class SchemaConfigController {
     }
 
     public record RuleRequest(String database, boolean visible, String comment) {
+    }
+
+    public record TableBatchRequest(String database, boolean visible, List<String> tableNames) {
+        public TableBatchRequest {
+            tableNames = tableNames == null ? List.of() : List.copyOf(tableNames);
+        }
+    }
+
+    public record FieldBatchRequest(String database, boolean visible, List<String> fieldNames) {
+        public FieldBatchRequest {
+            fieldNames = fieldNames == null ? List.of() : List.copyOf(fieldNames);
+        }
     }
 
     public record TableConfigView(String tableName, String dbComment, String customComment,

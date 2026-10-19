@@ -15,13 +15,73 @@ import {
   ReloadOutlined,
   EyeOutlined,
   SearchOutlined,
+  CheckOutlined,
+  StopOutlined,
 } from '@ant-design/icons'
 import {
   fetchSchemaTree,
   saveTableRule,
   saveFieldRule,
+  saveTableVisibilityBatch,
+  saveFieldVisibilityBatch,
   fetchPromptPreview,
 } from '../api/schemaConfigService'
+
+/** 可见性筛选项：白名单绿色点、黑名单红色点，与批量操作配色呼应 */
+const VISIBILITY_FILTER_OPTIONS = [
+  { label: '全部', value: 'all' },
+  {
+    label: (
+      <span className="schema-seg-option">
+        <i className="schema-dot schema-dot-white" />
+        仅白名单
+      </span>
+    ),
+    value: 'white',
+  },
+  {
+    label: (
+      <span className="schema-seg-option">
+        <i className="schema-dot schema-dot-black" />
+        仅黑名单
+      </span>
+    ),
+    value: 'black',
+  },
+]
+
+/** 批量黑白名单操作：作用于当前筛选结果 */
+function BatchVisibilityActions({ loading, disabled, onSelectAll, onSelectNone }) {
+  return (
+    <div className="schema-batch-actions">
+      <span className="schema-batch-label">批量</span>
+      <Tooltip title="把当前筛选结果全部加入白名单">
+        <Button
+          size="small"
+          className="schema-batch-btn schema-batch-white"
+          icon={<CheckOutlined />}
+          loading={loading}
+          disabled={disabled}
+          onClick={onSelectAll}
+        >
+          全选
+        </Button>
+      </Tooltip>
+      <Tooltip title="把当前筛选结果全部加入黑名单">
+        <Button
+          size="small"
+          className="schema-batch-btn schema-batch-black"
+          icon={<StopOutlined />}
+          loading={loading}
+          disabled={disabled}
+          onClick={onSelectNone}
+        >
+          全不选
+        </Button>
+      </Tooltip>
+    </div>
+  )
+}
 
 /**
  * Schema 配置页：表/字段黑白名单（黑名单模式，默认全部发送给大模型）+ 自定义注释。
@@ -33,6 +93,10 @@ export default function SchemaConfigPage() {
   const [loading, setLoading] = useState(false)
   const [selectedTable, setSelectedTable] = useState(null)
   const [tableSearch, setTableSearch] = useState('')
+  const [tableVisibilityFilter, setTableVisibilityFilter] = useState('all')
+  const [fieldVisibilityFilter, setFieldVisibilityFilter] = useState('all')
+  const [tableBatchLoading, setTableBatchLoading] = useState(false)
+  const [fieldBatchLoading, setFieldBatchLoading] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewText, setPreviewText] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -66,13 +130,31 @@ export default function SchemaConfigPage() {
 
   const filteredTables = useMemo(() => {
     const keyword = tableSearch.trim().toLowerCase()
-    if (!keyword) return tables
-    return tables.filter(
-      (t) =>
+    return tables.filter((t) => {
+      const visibilityMatches = tableVisibilityFilter === 'all'
+        || (tableVisibilityFilter === 'white' ? t.visible : !t.visible)
+      const keywordMatches = !keyword
+        || (
         t.tableName.toLowerCase().includes(keyword) ||
-        (t.customComment || t.dbComment || '').toLowerCase().includes(keyword),
-    )
-  }, [tables, tableSearch])
+        (t.dbComment || '').toLowerCase().includes(keyword) ||
+        (t.customComment || '').toLowerCase().includes(keyword)
+        )
+      return visibilityMatches && keywordMatches
+    })
+  }, [tables, tableSearch, tableVisibilityFilter])
+
+  const filteredFields = useMemo(() => {
+    if (!currentTable) return []
+    return currentTable.fields.filter((field) => (
+      fieldVisibilityFilter === 'all'
+      || (fieldVisibilityFilter === 'white' ? field.visible : !field.visible)
+    ))
+  }, [currentTable, fieldVisibilityFilter])
+
+  useEffect(() => {
+    if (filteredTables.some((table) => table.tableName === selectedTable)) return
+    setSelectedTable(filteredTables[0]?.tableName || null)
+  }, [filteredTables, selectedTable])
 
   const visibleCount = useMemo(
     () => tables.filter((t) => t.visible).length,
@@ -133,6 +215,65 @@ export default function SchemaConfigPage() {
     },
     [database, patchField],
   )
+
+  const batchToggleTables = useCallback(async (visible) => {
+    const targets = filteredTables.filter((table) => table.visible !== visible)
+    if (targets.length === 0) {
+      message.info(visible ? '当前表已全部在白名单中' : '当前表已全部在黑名单中')
+      return
+    }
+    setTableBatchLoading(true)
+    try {
+      await saveTableVisibilityBatch(
+        database,
+        targets.map((table) => table.tableName),
+        visible,
+      )
+      const names = new Set(targets.map((table) => table.tableName))
+      setTables((prev) => prev.map((table) => (
+        names.has(table.tableName) ? { ...table, visible } : table
+      )))
+      message.success(`已将 ${targets.length} 张表加入${visible ? '白名单' : '黑名单'}`)
+    } catch (error) {
+      message.error(`批量保存失败：${error.message || '服务异常'}`)
+    } finally {
+      setTableBatchLoading(false)
+    }
+  }, [database, filteredTables])
+
+  const batchToggleFields = useCallback(async (visible) => {
+    if (!currentTable) return
+    const targets = filteredFields.filter((field) => field.visible !== visible)
+    if (targets.length === 0) {
+      message.info(visible ? '当前字段已全部在白名单中' : '当前字段已全部在黑名单中')
+      return
+    }
+    setFieldBatchLoading(true)
+    try {
+      await saveFieldVisibilityBatch(
+        database,
+        currentTable.tableName,
+        targets.map((field) => field.fieldName),
+        visible,
+      )
+      const names = new Set(targets.map((field) => field.fieldName))
+      setTables((prev) => prev.map((table) => (
+        table.tableName === currentTable.tableName
+          ? {
+              ...table,
+              fields: table.fields.map((field) => (
+                names.has(field.fieldName) ? { ...field, visible } : field
+              )),
+            }
+          : table
+      )))
+      message.success(`已将 ${targets.length} 个字段加入${visible ? '白名单' : '黑名单'}`)
+    } catch (error) {
+      message.error(`批量保存失败：${error.message || '服务异常'}`)
+    } finally {
+      setFieldBatchLoading(false)
+    }
+  }, [currentTable, database, filteredFields])
 
   const editTableComment = useCallback(
     async (table, comment) => {
@@ -199,14 +340,16 @@ export default function SchemaConfigPage() {
         <span className={record.visible ? '' : 'schema-row-blocked'}>
           {value}
           {!record.visible && (
-            <Tag color="default" style={{ marginLeft: 6 }}>不发送</Tag>
+            <Tag color="default" style={{ marginLeft: 6 }}>黑名单</Tag>
           )}
         </span>
       ),
     },
     {
-      title: database === 'mysql' ? 'MySQL表注释' : '表注释（自定义覆盖）',
-      key: 'comment',
+      title: database === 'mysql' ? 'MySQL表注释' : '数据库注释',
+      dataIndex: 'dbComment',
+      key: 'dbComment',
+      ellipsis: true,
       render: (_, record) => database === 'mysql' ? (
         <Typography.Text
           className="schema-db-comment"
@@ -219,29 +362,27 @@ export default function SchemaConfigPage() {
         >
           {record.dbComment || '＋编辑注释'}
         </Typography.Text>
-      ) : (
-        <div className="schema-comment-cell">
-          {record.dbComment && (
-            <Tooltip title="数据库原始注释">
-              <span className="schema-db-comment">{record.dbComment}</span>
-            </Tooltip>
-          )}
-          <Typography.Text
-            className={record.customComment ? 'schema-custom-comment' : 'schema-custom-comment empty'}
-            editable={{
-              text: record.customComment || '',
-              onChange: (value) => editTableComment(record, value.trim()),
-              tooltip: '编辑自定义注释（覆盖数据库注释，留空恢复）',
-              triggerType: ['text', 'icon'],
-            }}
-          >
-            {record.customComment || '＋自定义注释'}
-          </Typography.Text>
-        </div>
+      ) : <span className="schema-db-comment">{record.dbComment || '—'}</span>,
+    },
+    database !== 'mysql' && {
+      title: '自定义注释',
+      key: 'customComment',
+      render: (_, record) => (
+        <Typography.Text
+          className={record.customComment ? 'schema-custom-comment' : 'schema-custom-comment empty'}
+          editable={{
+            text: record.customComment || '',
+            onChange: (value) => editTableComment(record, value.trim()),
+            tooltip: '编辑自定义注释（覆盖数据库注释，留空恢复）',
+            triggerType: ['text', 'icon'],
+          }}
+        >
+          {record.customComment || '＋自定义注释'}
+        </Typography.Text>
       ),
     },
     {
-      title: '发送给大模型',
+      title: '白名单',
       dataIndex: 'visible',
       key: 'visible',
       width: 110,
@@ -254,7 +395,7 @@ export default function SchemaConfigPage() {
         />
       ),
     },
-  ]
+  ].filter(Boolean)
 
   const fieldColumns = [
     {
@@ -265,7 +406,7 @@ export default function SchemaConfigPage() {
         <span className={record.visible ? '' : 'schema-row-blocked'}>
           {value}
           {!record.visible && (
-            <Tag color="default" style={{ marginLeft: 6 }}>不发送</Tag>
+            <Tag color="default" style={{ marginLeft: 6 }}>黑名单</Tag>
           )}
         </span>
       ),
@@ -314,7 +455,7 @@ export default function SchemaConfigPage() {
       ),
     },
     {
-      title: '发送给大模型',
+      title: '白名单',
       dataIndex: 'visible',
       key: 'visible',
       width: 110,
@@ -332,7 +473,8 @@ export default function SchemaConfigPage() {
   return (
     <div className="schema-config-main">
       <header className="chat-header">
-        黑白名单表配置
+        Schema 黑白名单配置
+        <span className="schema-header-sub">白名单发送给模型，黑名单从 Prompt 中排除</span>
       </header>
 
       <div className="schema-toolbar">
@@ -342,6 +484,8 @@ export default function SchemaConfigPage() {
             setDatabase(value)
             setSelectedTable(null)
             setTableSearch('')
+            setTableVisibilityFilter('all')
+            setFieldVisibilityFilter('all')
           }}
           options={[
             { label: 'MySQL', value: 'mysql' },
@@ -349,7 +493,7 @@ export default function SchemaConfigPage() {
           ]}
         />
         <span className="schema-stat">
-          已启用 {visibleCount}/{tables.length} 张表
+          白名单 {visibleCount} · 黑名单 {tables.length - visibleCount} · 共 {tables.length} 张表
         </span>
         <div style={{ flex: 1 }} />
         <Button
@@ -369,14 +513,35 @@ export default function SchemaConfigPage() {
 
       <div className="schema-content">
         <div className="schema-table-panel">
-          <Input
-            allowClear
-            prefix={<SearchOutlined style={{ color: '#999' }} />}
-            placeholder="搜索表名或注释"
-            value={tableSearch}
-            onChange={(e) => setTableSearch(e.target.value)}
-            style={{ marginBottom: 8 }}
-          />
+          <div className="schema-panel-heading">
+            <div>
+              <div className="schema-panel-title">数据表</div>
+              <div className="schema-panel-caption">当前展示 {filteredTables.length} 张</div>
+            </div>
+          </div>
+          <div className="schema-filter-bar">
+            <Input
+              allowClear
+              prefix={<SearchOutlined style={{ color: '#999' }} />}
+              placeholder="搜索表名或注释"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+            />
+            <div className="schema-filter-controls">
+              <Segmented
+                size="small"
+                value={tableVisibilityFilter}
+                onChange={setTableVisibilityFilter}
+                options={VISIBILITY_FILTER_OPTIONS}
+              />
+              <BatchVisibilityActions
+                loading={tableBatchLoading}
+                disabled={filteredTables.length === 0}
+                onSelectAll={() => batchToggleTables(true)}
+                onSelectNone={() => batchToggleTables(false)}
+              />
+            </div>
+          </div>
           <Table
             size="small"
             rowKey="tableName"
@@ -384,7 +549,7 @@ export default function SchemaConfigPage() {
             columns={tableColumns}
             dataSource={filteredTables}
             pagination={false}
-            scroll={{ y: 'calc(100vh - 220px)' }}
+            scroll={{ y: 'calc(100vh - 292px)' }}
             rowClassName={(record) =>
               record.tableName === selectedTable ? 'schema-table-row-selected' : ''
             }
@@ -399,21 +564,38 @@ export default function SchemaConfigPage() {
           {currentTable ? (
             <>
               <div className="schema-field-panel-title">
-                字段配置：
-                <span className="schema-field-panel-table">{currentTable.tableName}</span>
+                <div>
+                  <span>字段配置</span>
+                  <span className="schema-field-panel-table">{currentTable.tableName}</span>
+                </div>
                 <span className="schema-stat">
-                  {currentTable.fields.filter((f) => f.visible).length}/
-                  {currentTable.fields.length} 个字段已启用
+                  白名单 {currentTable.fields.filter((f) => f.visible).length} ·
+                  黑名单 {currentTable.fields.filter((f) => !f.visible).length}
                 </span>
+              </div>
+              <div className="schema-filter-bar schema-field-filter-bar">
+                <Segmented
+                  size="small"
+                  value={fieldVisibilityFilter}
+                  onChange={setFieldVisibilityFilter}
+                  options={VISIBILITY_FILTER_OPTIONS}
+                />
+                <span className="schema-panel-caption">当前展示 {filteredFields.length} 个字段</span>
+                <BatchVisibilityActions
+                  loading={fieldBatchLoading}
+                  disabled={filteredFields.length === 0}
+                  onSelectAll={() => batchToggleFields(true)}
+                  onSelectNone={() => batchToggleFields(false)}
+                />
               </div>
               <Table
                 size="small"
                 rowKey="fieldName"
                 loading={loading}
                 columns={fieldColumns}
-                dataSource={currentTable.fields}
+                dataSource={filteredFields}
                 pagination={false}
-                scroll={{ y: 'calc(100vh - 260px)' }}
+                scroll={{ y: 'calc(100vh - 292px)' }}
               />
             </>
           ) : (

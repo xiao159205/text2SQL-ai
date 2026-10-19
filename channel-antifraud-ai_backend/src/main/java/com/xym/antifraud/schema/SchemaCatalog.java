@@ -2,6 +2,7 @@ package com.xym.antifraud.schema;
 
 import com.xym.antifraud.config.AntifraudProperties;
 import com.xym.antifraud.datasource.DatabaseContext;
+import com.xym.antifraud.datasource.DatabaseConnectionContext;
 import com.xym.antifraud.datasource.DatabaseType;
 import com.xym.antifraud.service.SchemaConfigService;
 import org.slf4j.Logger;
@@ -12,6 +13,7 @@ import org.springframework.jdbc.core.ConnectionCallback;
 
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -47,11 +49,16 @@ public class SchemaCatalog {
             ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION
             """;
 
+    private static final String HIVE_METASTORE_SCHEMA_SERDES =
+            "hive.serdes.using.metastore.for.schema";
+    private static final String HIVE_JSON_SERDE =
+            "org.apache.hadoop.hive.serde2.JsonSerDe";
+
     private final JdbcTemplate jdbcTemplate;
     private final AntifraudProperties properties;
     private final SchemaConfigService configService;
     private final Clock clock = Clock.systemUTC();
-    private final Map<DatabaseType, Snapshot> snapshots = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Snapshot> snapshots = new java.util.concurrent.ConcurrentHashMap<>();
 
     public SchemaCatalog(@Qualifier("jdbcTemplate") JdbcTemplate jdbcTemplate,
                          AntifraudProperties properties,
@@ -72,7 +79,8 @@ public class SchemaCatalog {
     public void refresh() {
         log.info("[Schema手动刷新] 开始重新读取MySQL元数据");
         synchronized (this) {
-            snapshots.put(DatabaseContext.current(), loadSnapshot());
+            DatabaseType type = DatabaseContext.current();
+            snapshots.put(DatabaseConnectionContext.cacheKey(type), loadSnapshot());
         }
     }
 
@@ -167,14 +175,15 @@ public class SchemaCatalog {
 
     private Snapshot snapshot() {
         DatabaseType database = DatabaseContext.current();
-        Snapshot current = snapshots.get(database);
+        String cacheKey = DatabaseConnectionContext.cacheKey(database);
+        Snapshot current = snapshots.get(cacheKey);
         Instant now = clock.instant();
         if (current == null || now.isAfter(current.loadedAt().plusSeconds(properties.schemaCacheSeconds()))) {
             synchronized (this) {
-                current = snapshots.get(database);
+                current = snapshots.get(cacheKey);
                 if (current == null || now.isAfter(current.loadedAt().plusSeconds(properties.schemaCacheSeconds()))) {
                     current = loadSnapshot();
-                    snapshots.put(database, current);
+                    snapshots.put(cacheKey, current);
                 }
             }
         }
@@ -213,7 +222,7 @@ public class SchemaCatalog {
                 new TableDefinition(value.tableName(),
                         configService.tableComment(database, value.tableName()).orElse(value.comment()),
                         Map.copyOf(value.columns()))));
-        String prompt = buildPromptSchema(tables, relationships, columnCount);
+        String prompt = buildPromptSchema(database, tables, relationships, columnCount);
         long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
         log.info("[Schema加载完成] database={}, tables={}, columns={}, relationships={}, tableNames={}, elapsedMs={}",
                 databaseName, tables.size(), columnCount, relationships.size(),
@@ -296,7 +305,7 @@ public class SchemaCatalog {
                 new TableDefinition(value.tableName(),
                         configService.tableComment(database, value.tableName()).orElse(value.comment()),
                         Map.copyOf(value.columns()))));
-        String prompt = buildPromptSchema(tables, List.of(), columnCount);
+        String prompt = buildPromptSchema(database, tables, List.of(), columnCount);
         Snapshot loaded = new Snapshot(Instant.now(clock), Map.copyOf(tables), columnCount, prompt);
 
         long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
@@ -312,6 +321,7 @@ public class SchemaCatalog {
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
         return jdbcTemplate.execute((ConnectionCallback<Map<String, MutableTable>>) connection -> {
+            configureHiveMetastoreSchema(connection);
             DatabaseMetaData metadata = connection.getMetaData();
             Map<String, MutableTable> mutableTables = new LinkedHashMap<>();
             try (ResultSet tableRows = metadata.getTables(
@@ -353,11 +363,60 @@ public class SchemaCatalog {
         });
     }
 
-    private String buildPromptSchema(Map<String, TableDefinition> tables, List<Relationship> relationships, int columnCount) {
+    /**
+     * JsonSerDe 默认会让 DESCRIBE 使用反序列化器推导的字段信息，并把 DDL 中的字段注释
+     * 显示成 "from deserializer"。当前 JDBC 会话把它加入使用 metastore schema 的 SerDe
+     * 列表后，DESCRIBE 才会返回 CREATE TABLE 中保存的真实字段注释。
+     */
+    private void configureHiveMetastoreSchema(java.sql.Connection connection) {
+        try (var statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SET " + HIVE_METASTORE_SCHEMA_SERDES)) {
+            String configuredValue = null;
+            while (rows.next()) {
+                String setting = rows.getString(1);
+                String prefix = HIVE_METASTORE_SCHEMA_SERDES + "=";
+                if (setting != null && setting.startsWith(prefix)) {
+                    configuredValue = setting.substring(prefix.length()).trim();
+                    break;
+                }
+            }
+            if (configuredValue == null) {
+                log.warn("[Hive Schema] 无法读取配置 {}，字段注释可能显示为 from deserializer",
+                        HIVE_METASTORE_SCHEMA_SERDES);
+                return;
+            }
+
+            LinkedHashSet<String> serdes = new LinkedHashSet<>();
+            if (!configuredValue.isBlank()) {
+                for (String serde : configuredValue.split(",")) {
+                    if (!serde.isBlank()) {
+                        serdes.add(serde.trim());
+                    }
+                }
+            }
+            if (!serdes.add(HIVE_JSON_SERDE)) {
+                return;
+            }
+
+            try (var updateStatement = connection.createStatement()) {
+                updateStatement.execute("SET " + HIVE_METASTORE_SCHEMA_SERDES
+                        + "=" + String.join(",", serdes));
+            }
+            log.info("[Hive Schema] 当前会话已启用 JsonSerDe metastore 字段注释");
+        } catch (SQLException exception) {
+            log.warn("[Hive Schema] 配置 JsonSerDe metastore 字段注释失败，将使用 Hive 默认元数据: {}",
+                    exception.getMessage());
+        }
+    }
+
+    private String buildPromptSchema(DatabaseType database, Map<String, TableDefinition> tables,
+                                     List<Relationship> relationships, int columnCount) {
         StringBuilder builder = new StringBuilder(Math.max(4096, columnCount * 80));
-        builder.append("当前MySQL数据库Schema，共").append(tables.size()).append("张表、")
+        String databaseLabel = database == DatabaseType.HIVE ? "Hive" : "MySQL";
+        builder.append("当前").append(databaseLabel).append("数据库Schema，共")
+                .append(tables.size()).append("张表、")
                 .append(columnCount).append("个字段。\n");
-        builder.append("格式：字段名 | MySQL类型 | 字段注释\n");
+        builder.append("格式：字段名 | ").append(databaseLabel).append("类型 | 字段注释\n");
         if (!relationships.isEmpty()) {
             builder.append("\n数据库外键关系：\n");
             relationships.forEach(relation -> builder.append("  ")

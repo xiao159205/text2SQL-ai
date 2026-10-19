@@ -12,6 +12,7 @@ spring:
     client:
       factory: jdk
   datasource:
+    # 系统配置库；与用户在页面选择的业务查询库相互独立。
     url: ${MYSQL_URL:jdbc:mysql://hadoop105:3306/cfrm_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:xiao159205}
@@ -22,13 +23,14 @@ spring:
       read-only: true
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 20MB
+      max-request-size: 22MB
   ai:
     openai:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
       api-key: sk-40a13f1437b540728c77a12fcf92461d
       chat:
+        api-key: sk-40a13f1437b540728c77a12fcf92461d
         completions-path: /chat/completions
         options:
           model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
@@ -61,6 +63,37 @@ logging:
     com.xym.antifraud: INFO
 
 app:
+  knowledge:
+    # ES 7.6.1使用BM25与dense_vector script_score混合召回。
+    enabled: ${KNOWLEDGE_ENABLED:true}
+    base-url: ${ELASTICSEARCH_URL:http://hadoop105:9200}
+    index-name: ${KNOWLEDGE_INDEX:channel-antifraud-knowledge}
+    initialize-index: true
+    # 混合召回30~100条，Reranker最终保留5~10条。
+    candidate-k: ${KNOWLEDGE_CANDIDATE_K:50}
+    top-k: ${KNOWLEDGE_TOP_K:8}
+    max-context-chars: 8000
+    bm25-weight: ${KNOWLEDGE_BM25_WEIGHT:0.45}
+    vector-weight: ${KNOWLEDGE_VECTOR_WEIGHT:0.55}
+    rrf-k: ${KNOWLEDGE_RRF_K:60}
+    query-rewrite-enabled: ${KNOWLEDGE_QUERY_REWRITE_ENABLED:true}
+    rerank-enabled: ${KNOWLEDGE_RERANK_ENABLED:true}
+    # SiliconFlow Qwen3 Embedding；沿用现有ES dense_vector的1536维映射。
+    embedding-enabled: true
+    embedding-base-url: https://api.siliconflow.cn/v1
+    embedding-api-key: sk-rvpatyrxtezwisxmqesrpmizsrurlcpmnhubuatfdavzscgv
+    embedding-model: Qwen/Qwen3-Embedding-8B
+    embedding-dimensions: 1536
+  knowledge-files:
+    storage-directory: ${KNOWLEDGE_FILE_DIRECTORY:./data/knowledge-files}
+    max-file-bytes: 20971520
+    max-extracted-chars: 2000000
+    chunk-chars: 30000
+    chunk-overlap-chars: 1000
+    max-chunks: 500
+  chat-memory:
+    # 每次生成新AST时携带最近几轮对话；上限20轮，避免Prompt无限增长。
+    recent-rounds: 6
   storage:
     # 头像写入前端源码目录；数据库仅保存 src/asserts/<文件名>。
     avatar-directory: ${AVATAR_DIRECTORY:../channel-antifraud-ai-frontend/src/asserts}

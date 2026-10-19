@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xym.antifraud.mapper.ChatHistoryMapper">
+    <resultMap id="conversationMap" type="com.xym.antifraud.entity.ChatConversation">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="title" column="title"/>
+        <result property="databaseType" column="database_type"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="messageMap" type="com.xym.antifraud.entity.ChatMessage">
+        <id property="id" column="id"/>
+        <result property="conversationId" column="conversation_id"/>
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="sqlText" column="sql_text"/>
+        <result property="queryPlanJson" column="query_plan_json"/>
+        <result property="responseJson" column="response_json"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insertConversation" parameterType="com.xym.antifraud.entity.ChatConversation"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_conversation (user_id, title, database_type)
+        VALUES (#{userId}, #{title}, #{databaseType})
+    </insert>
+
+    <select id="selectConversation" resultMap="conversationMap">
+        SELECT id, user_id, title, database_type, created_at, updated_at
+        FROM chat_conversation
+        WHERE id = #{id} AND user_id = #{userId}
+    </select>
+
+    <select id="selectConversations" resultMap="conversationMap">
+        SELECT id, user_id, title, database_type, created_at, updated_at
+        FROM chat_conversation
+        WHERE user_id = #{userId}
+        ORDER BY updated_at DESC, id DESC
+    </select>
+
+    <update id="touchConversation">
+        UPDATE chat_conversation SET updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteConversation">
+        DELETE FROM chat_conversation WHERE id = #{id} AND user_id = #{userId}
+    </delete>
+
+    <insert id="insertMessage" parameterType="com.xym.antifraud.entity.ChatMessage"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_message
+            (conversation_id, role, content, sql_text, query_plan_json, response_json)
+        VALUES
+            (#{conversationId}, #{role}, #{content}, #{sqlText}, #{queryPlanJson}, #{responseJson})
+    </insert>
+
+    <select id="selectMessages" resultMap="messageMap">
+        SELECT id, conversation_id, role, content, sql_text, query_plan_json,
+               response_json, created_at
+        FROM chat_message
+        WHERE conversation_id = #{conversationId}
+        ORDER BY id ASC
+    </select>
+
+    <select id="selectMessage" resultMap="messageMap">
+        SELECT id, conversation_id, role, content, sql_text, query_plan_json,
+               response_json, created_at
+        FROM chat_message
+        WHERE conversation_id = #{conversationId} AND id = #{messageId}
+    </select>
+
+    <select id="selectRecentMessages" resultMap="messageMap">
+        SELECT id, conversation_id, role, content, sql_text, query_plan_json,
+               response_json, created_at
+        FROM (
+            SELECT id, conversation_id, role, content, sql_text, query_plan_json,
+                   response_json, created_at
+            FROM chat_message
+            WHERE conversation_id = #{conversationId}
+            <if test="beforeMessageId != null">
+                AND id &lt; #{beforeMessageId}
+            </if>
+            ORDER BY id DESC
+            LIMIT #{limit}
+        ) recent
+        ORDER BY id ASC
+    </select>
+
+    <delete id="deleteMessagesFrom">
+        DELETE FROM chat_message
+        WHERE conversation_id = #{conversationId} AND id &gt;= #{messageId}
+    </delete>
+</mapper>

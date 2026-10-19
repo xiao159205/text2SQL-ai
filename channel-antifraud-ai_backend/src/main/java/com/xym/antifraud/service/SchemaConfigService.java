@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -75,6 +76,30 @@ public class SchemaConfigService {
         reload(database);
         log.info("[Schema配置] 字段规则已保存: database={}, table={}, field={}, visible={}, customComment={}",
                 database, tableName, fieldName, visible, customComment);
+    }
+
+    public void saveTableVisibilityBatch(DatabaseType database, List<String> tableNames,
+                                         boolean visible) {
+        if (tableNames == null || tableNames.isEmpty()) {
+            return;
+        }
+        mapper.upsertTableVisibilityBatch(database.name(), List.copyOf(tableNames),
+                visible ? 1 : 0);
+        reload(database);
+        log.info("[Schema配置] 批量保存表可见性: database={}, count={}, visible={}",
+                database, tableNames.size(), visible);
+    }
+
+    public void saveFieldVisibilityBatch(DatabaseType database, String tableName,
+                                         List<String> fieldNames, boolean visible) {
+        if (fieldNames == null || fieldNames.isEmpty()) {
+            return;
+        }
+        mapper.upsertFieldVisibilityBatch(database.name(), tableName,
+                List.copyOf(fieldNames), visible ? 1 : 0);
+        reload(database);
+        log.info("[Schema配置] 批量保存字段可见性: database={}, table={}, count={}, visible={}",
+                database, tableName, fieldNames.size(), visible);
     }
 
     private Rules rulesFor(DatabaseType database) {

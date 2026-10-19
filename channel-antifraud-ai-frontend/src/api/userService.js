@@ -5,15 +5,19 @@
  *       username、phone、password、avatarFile 均必填；
  *       后端将 avatarFile 保存到前端工程 src/asserts 目录，
  *       并在 users.avatar_path 中记录相对路径（如 src/asserts/xxx.png）。
- *   POST /api/auth/login     入参 JSON：{ phone, password }
- *   两个接口成功时均返回：{ id, username, phone, avatarPath, token }
+ *   POST /api/auth/login     入参 JSON：{ account, password }，account 可为手机号或用户名
+ *   两个接口成功时均返回：{ id, username, phone, avatarPath, role, token }
  */
 
 const SESSION_KEY = 'channel-antifraud-ai-user'
 
 export function getSession() {
   try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY))
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY))
+    if (session && !Array.isArray(session.dataSources)) {
+      session.dataSources = session.role === 'ADMIN' ? ['mysql', 'hive'] : ['mysql']
+    }
+    return session
   } catch {
     return null
   }
@@ -41,6 +45,8 @@ function toSession(body) {
     username: body?.username ?? '',
     phone: body?.phone ?? '',
     avatarPath: body?.avatarPath ?? body?.avatar_path ?? '',
+    role: body?.role === 'ADMIN' ? 'ADMIN' : 'USER',
+    dataSources: Array.isArray(body?.dataSources) ? body.dataSources : [],
     token: body?.token ?? '',
   }
   saveSession(user)
@@ -48,14 +54,14 @@ function toSession(body) {
 }
 
 /**
- * 账号密码登录（手机号 + 密码）。
+ * 账号密码登录（手机号或用户名 + 密码）。
  * @returns {Promise<object>} 登录成功后的用户会话
  */
-export async function login({ phone, password }) {
+export async function login({ account, password }) {
   const response = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, password }),
+    body: JSON.stringify({ account, password }),
   })
   return toSession(await parseResponse(response))
 }

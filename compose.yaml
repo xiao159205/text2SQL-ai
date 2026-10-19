@@ -1,0 +1,85 @@
+name: channel-antifraud-ai
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=256M
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./channel-antifraud-ai_backend/src/main/resources/db/schema-config.sql:/docker-entrypoint-initdb.d/01-schema-config.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./channel-antifraud-ai_backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      MYSQL_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
+      MYSQL_USERNAME: "${MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
+
+      DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL}"
+      DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY}"
+      DEEPSEEK_MODEL: "${DEEPSEEK_MODEL}"
+
+      KNOWLEDGE_ENABLED: "false"
+      APP_KNOWLEDGE_EMBEDDING_ENABLED: "false"
+
+      TEXT2SQL_LOG_FULL_PROMPT: "false"
+      TEXT2SQL_LOG_MODEL_RESPONSE: "false"
+      TEXT2SQL_LOG_QUERY_RESULTS: "false"
+
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "5"
+      AVATAR_DIRECTORY: "/data/avatars"
+      TZ: Asia/Shanghai
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx512m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC -Duser.timezone=Asia/Shanghai"
+    expose:
+      - "8080"
+    volumes:
+      - avatar_data:/data/avatars
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 3 bash -c '</dev/tcp/127.0.0.1/8080'
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./channel-antifraud-ai-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - avatar_data:/usr/share/nginx/html/src/asserts:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+  avatar_data:

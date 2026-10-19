@@ -9,15 +9,35 @@
         <result property="phone" column="phone"/>
         <result property="password" column="password"/>
         <result property="avatarPath" column="avatar_path"/>
+        <result property="role" column="role"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
-    <select id="selectByPhone" resultMap="userMap">
-        SELECT id, username, phone, password, avatar_path, created_at, updated_at
+    <select id="selectByAccount" resultMap="userMap">
+        SELECT id, username, phone, password, avatar_path, role, created_at, updated_at
         FROM users
-        WHERE phone = #{phone}
+        WHERE phone = #{account} OR username = #{account}
+        ORDER BY CASE WHEN phone = #{account} THEN 0 ELSE 1 END
         LIMIT 1
+    </select>
+
+    <select id="selectById" resultMap="userMap">
+        SELECT id, username, phone, password, avatar_path, role, created_at, updated_at
+        FROM users
+        WHERE id = #{id}
+    </select>
+
+    <select id="selectAll" resultMap="userMap">
+        SELECT id, username, phone, password, avatar_path, role, created_at, updated_at
+        FROM users
+        <where>
+            <if test="keyword != null and keyword != ''">
+                username LIKE CONCAT('%', #{keyword}, '%')
+                OR phone LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+        </where>
+        ORDER BY CASE WHEN role = 'ADMIN' THEN 0 ELSE 1 END, created_at DESC, id DESC
     </select>
 
     <select id="countByPhone" resultType="int">
@@ -28,9 +48,58 @@
         SELECT COUNT(1) FROM users WHERE username = #{username}
     </select>
 
+    <select id="countByPhoneExcludingId" resultType="int">
+        SELECT COUNT(1) FROM users WHERE phone = #{phone} AND id != #{id}
+    </select>
+
+    <select id="countByUsernameExcludingId" resultType="int">
+        SELECT COUNT(1) FROM users WHERE username = #{username} AND id != #{id}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(1) FROM users
+    </select>
+
+    <select id="countAdmins" resultType="int">
+        SELECT COUNT(1) FROM users WHERE role = 'ADMIN'
+    </select>
+
     <insert id="insert" parameterType="com.xym.antifraud.entity.User"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO users (username, phone, password, avatar_path)
-        VALUES (#{username}, #{phone}, #{password}, #{avatarPath})
+        INSERT INTO users (username, phone, password, avatar_path, role)
+        VALUES (#{username}, #{phone}, #{password}, #{avatarPath}, #{role})
+    </insert>
+
+    <update id="update" parameterType="com.xym.antifraud.entity.User">
+        UPDATE users
+        SET username = #{username},
+            phone = #{phone},
+            password = #{password},
+            avatar_path = #{avatarPath},
+            role = #{role}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM users WHERE id = #{id}
+    </delete>
+
+    <select id="selectDataSources" resultType="string">
+        SELECT data_source
+        FROM user_data_source_permission
+        WHERE user_id = #{userId}
+        ORDER BY data_source
+    </select>
+
+    <delete id="deleteDataSources">
+        DELETE FROM user_data_source_permission WHERE user_id = #{userId}
+    </delete>
+
+    <insert id="insertDataSources">
+        INSERT INTO user_data_source_permission (user_id, data_source)
+        VALUES
+        <foreach collection="dataSources" item="dataSource" separator=",">
+            (#{userId}, #{dataSource})
+        </foreach>
     </insert>
 </mapper>

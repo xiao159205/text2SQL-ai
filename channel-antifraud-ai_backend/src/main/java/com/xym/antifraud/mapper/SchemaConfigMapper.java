@@ -20,6 +20,15 @@ public interface SchemaConfigMapper {
                         @Param("visible") int visible,
                         @Param("customComment") String customComment);
 
+    int upsertTableVisibilityBatch(@Param("databaseType") String databaseType,
+                                   @Param("tableNames") List<String> tableNames,
+                                   @Param("visible") int visible);
+
+    int upsertFieldVisibilityBatch(@Param("databaseType") String databaseType,
+                                   @Param("tableName") String tableName,
+                                   @Param("fieldNames") List<String> fieldNames,
+                                   @Param("visible") int visible);
+
     List<SchemaTableRule> selectTableRules(@Param("databaseType") String databaseType);
 
     List<SchemaFieldRule> selectFieldRules(@Param("databaseType") String databaseType);

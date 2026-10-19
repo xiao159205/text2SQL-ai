@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xym.antifraud.mapper.UserSessionMapper">
+    <insert id="insert">
+        INSERT INTO user_session (token, user_id, expires_at)
+        VALUES (#{token}, #{userId}, #{expiresAt})
+    </insert>
+
+    <select id="selectUserIdByToken" resultType="java.lang.Long">
+        SELECT user_id
+        FROM user_session
+        WHERE token = #{token} AND expires_at &gt; CURRENT_TIMESTAMP
+        LIMIT 1
+    </select>
+
+    <delete id="deleteByToken">
+        DELETE FROM user_session WHERE token = #{token}
+    </delete>
+</mapper>

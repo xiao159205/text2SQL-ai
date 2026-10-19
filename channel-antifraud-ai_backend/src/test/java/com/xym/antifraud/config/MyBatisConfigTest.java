@@ -18,9 +18,25 @@ class MyBatisConfigTest {
         assertThat(factory.getConfiguration().hasStatement(
                 "com.xym.antifraud.mapper.SchemaConfigMapper.selectTableRules")).isTrue();
         assertThat(factory.getConfiguration().hasStatement(
-                "com.xym.antifraud.mapper.UserMapper.selectByPhone")).isTrue();
+                "com.xym.antifraud.mapper.SchemaConfigMapper.upsertTableVisibilityBatch")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.SchemaConfigMapper.upsertFieldVisibilityBatch")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.UserMapper.selectByAccount")).isTrue();
         assertThat(factory.getConfiguration().hasStatement(
                 "com.xym.antifraud.mapper.UserMapper.insert")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.ChatHistoryMapper.selectRecentMessages")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.ChatHistoryMapper.insertMessage")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.UserSessionMapper.selectUserIdByToken")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.PromptConfigMapper.selectByDatabaseType")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.PromptConfigMapper.upsert")).isTrue();
+        assertThat(factory.getConfiguration().hasStatement(
+                "com.xym.antifraud.mapper.PromptConfigMapper.deleteByDatabaseType")).isTrue();
 
         var tableConstructorTypes = factory.getConfiguration()
                 .getResultMap("com.xym.antifraud.mapper.SchemaConfigMapper.tableRuleMap")

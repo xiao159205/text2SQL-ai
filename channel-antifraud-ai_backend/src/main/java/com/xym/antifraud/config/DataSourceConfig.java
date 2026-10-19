@@ -1,8 +1,9 @@
 package com.xym.antifraud.config;
 
 import com.zaxxer.hikari.HikariDataSource;
-import com.xym.antifraud.datasource.DatabaseContext;
 import com.xym.antifraud.datasource.DatabaseType;
+import com.xym.antifraud.datasource.UserRoutingDataSource;
+import com.xym.antifraud.service.UserDataSourceConnectionService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -10,7 +11,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
 
 import javax.sql.DataSource;
 import java.util.Map;
@@ -69,19 +69,11 @@ public class DataSourceConfig {
     @Primary
     public DataSource dataSource(
             @Qualifier("mysqlDataSource") DataSource mysqlDataSource,
-            @Qualifier("hiveDataSource") DataSource hiveDataSource) {
-        AbstractRoutingDataSource routingDataSource = new AbstractRoutingDataSource() {
-            @Override
-            protected Object determineCurrentLookupKey() {
-                return DatabaseContext.current();
-            }
-        };
-        routingDataSource.setTargetDataSources(Map.of(
+            @Qualifier("hiveDataSource") DataSource hiveDataSource,
+            UserDataSourceConnectionService connectionService) {
+        return new UserRoutingDataSource(Map.of(
                 DatabaseType.MYSQL, mysqlDataSource,
-                DatabaseType.HIVE, hiveDataSource));
-        routingDataSource.setDefaultTargetDataSource(mysqlDataSource);
-        routingDataSource.setLenientFallback(false);
-        return routingDataSource;
+                DatabaseType.HIVE, hiveDataSource), connectionService);
     }
 
     /**

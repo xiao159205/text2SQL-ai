@@ -1,6 +1,8 @@
 package com.xym.antifraud.query;
 
 import com.xym.antifraud.config.AntifraudProperties;
+import com.xym.antifraud.datasource.DatabaseContext;
+import com.xym.antifraud.datasource.DatabaseType;
 import com.xym.antifraud.query.ast.SqlQueryPlan;
 import com.xym.antifraud.schema.FieldDefinition;
 import com.xym.antifraud.schema.SchemaCatalog;
@@ -13,6 +15,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -114,6 +117,42 @@ class SqlAstCompilerTest {
                         + "AND `status` IN ('ACTIVE', 'RISK')"
         );
     }
+
+    @Test
+    void allowsHiveAggregationOnStringFieldWithoutCast() {
+        DatabaseContext.use(DatabaseType.HIVE);
+        try {
+            CompiledQuery result = compiler.compile(stringAmountAggregationPlan());
+
+            assertThat(result.sql()).isEqualTo(
+                    "SELECT SUM(`t`.`amount_text`) AS `total_amount` "
+                            + "FROM `transactions` AS `t` LIMIT 100");
+        } finally {
+            DatabaseContext.clear();
+        }
+    }
+
+    @Test
+    void stillRejectsMysqlAggregationOnStringField() {
+        DatabaseContext.use(DatabaseType.MYSQL);
+        try {
+            assertThatThrownBy(() -> compiler.compile(stringAmountAggregationPlan()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("SUM只能用于数值字段");
+        } finally {
+            DatabaseContext.clear();
+        }
+    }
+
+    private SqlQueryPlan stringAmountAggregationPlan() {
+        return new SqlQueryPlan(
+                SqlQueryPlan.PlanStatus.READY, "", SqlQueryPlan.StatementType.SELECT,
+                new SqlQueryPlan.TableRef("transactions", "t"), List.of(), false,
+                List.of(new SqlQueryPlan.SelectItem("t.amount_text",
+                        SqlQueryPlan.Aggregate.SUM, "total_amount")),
+                null, List.of(), List.of(), List.of(), 100);
+    }
+
     private SchemaCatalog mockCatalog() {
         Map<String, SchemaCatalog.TableDefinition> tables = new LinkedHashMap<>();
         tables.put("customers", table("customers",
@@ -123,7 +162,8 @@ class SqlAstCompilerTest {
                 field("transactions", 1, "id", "bigint", "交易ID"),
                 field("transactions", 2, "customer_id", "bigint", "客户ID"),
                 field("transactions", 3, "amount", "decimal(18,2)", "交易金额"),
-                field("transactions", 4, "trade_time", "datetime", "交易时间")));
+                field("transactions", 4, "trade_time", "datetime", "交易时间"),
+                field("transactions", 5, "amount_text", "string", "字符串交易金额")));
 
         SchemaCatalog catalog = mock(SchemaCatalog.class);
         when(catalog.requireTable(anyString())).thenAnswer(invocation -> {

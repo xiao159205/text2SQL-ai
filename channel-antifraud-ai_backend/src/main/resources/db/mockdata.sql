@@ -57,4 +57,4 @@ CREATE TABLE `ebank_transaction_risk_detail` (
   KEY `idx_ebank_risk_acct_date` (`acct_no`,`flat_sys_date`),
   KEY `idx_ebank_risk_device` (`equip_id`),
   KEY `idx_ebank_risk_ip` (`ip`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='电子银行交易风险重点明细'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='电子银行交易业务明细'

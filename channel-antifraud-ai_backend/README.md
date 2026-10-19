@@ -552,4 +552,30 @@ Mapper SQL 全部放在 `src/main/resources/mapper/*.xml`，Java Mapper 接口�
 - `POST /api/auth/login`：JSON，字段为 `phone`、`password`。
 - 两个接口成功后都返回 `id`、`username`、`phone`、`avatarPath`、`token`。
 - 密码使用 BCrypt 哈希后入库；头像默认保存到前端 `src/asserts`，MySQL 的 `avatar_path` 只记录 `src/asserts/<文件名>` 相对路径，可用环境变量 `AVATAR_DIRECTORY` 修改实际存放目录。
+- `spring.datasource` 是系统配置库，与用户选择的业务查询库相互独立；模型密钥仍通过 `DEEPSEEK_API_KEY`、`EMBEDDING_API_KEY` 注入。
+- 管理员可在用户管理页分配 MySQL/Hive 连接权限。用户在问答页填写 IP、端口和账号，测试成功后从实例返回的库列表中选择具体数据库；密码仅保存在服务进程的临时连接池中。聊天接口会校验连接所有者和数据库类型，Schema 缓存按具体连接隔离。已有环境升级时执行 `db/admin-rbac-migration.sql` 创建并初始化 `user_data_source_permission`。
 - 首次运行前请在业务 MySQL 库执行 `src/main/resources/db/schema-config.sql`，其中包含 `users` 及 Schema 配置表。
+
+## RAG 知识库问答
+
+- `POST /api/knowledge` 写入知识文档；开启向量能力后写入时同步生成 Embedding。
+- `POST /api/rag/ask` 执行 Query 改写、BM25/向量混合召回、加权 RRF 融合、LLM Rerank、上下文组装和答案生成。
+- 请求体示例：`{"question":"高风险客户如何定义？","database":"mysql"}`；响应包含 `rewrittenQuery`、`answer` 和 `sources`。
+- 默认召回 50 条候选并保留 8 条；可通过 `KNOWLEDGE_CANDIDATE_K` 和 `KNOWLEDGE_TOP_K` 调整。
+- 已配置 SiliconFlow `Qwen/Qwen3-Embedding-8B`（1536维）并开启向量检索；Embedding参数位于 `application.yml`。
+- `POST /api/knowledge/files` 接收 `multipart/form-data`，支持 `.md`、`.txt`、`.pdf`、`.doc`、`.docx`，字段包括 `file`、`database`、`knowledgeType`、`tableNames`、`keywords`、`source`。
+- 文件由 Apache Tika 解析，默认按约 1200 字切片并保留 150 字重叠；原文件保存在 `./data/knowledge-files`，每个切片单独生成向量并写入知识索引。
+- `GET /api/knowledge/files` 获取文件及构建状态；`POST /api/knowledge/files/{id}/rebuild` 重新构建；`DELETE /api/knowledge/files/{id}` 删除原文件和全部切片。
+- 单文件默认上限 20MB；扫描图片型 PDF 目前不执行 OCR，需要上传带文本层的 PDF。
+
+## 多轮上下文与历史会话
+
+- 登录/注册返回的 Token 会保存到 `user_session`，历史会话接口通过 `Authorization: Bearer <token>` 识别用户。
+- `chat_conversation` 保存会话标题、所属用户和固定数据源，`chat_message` 保存每轮问题、完整响应、SQL 与查询 AST。
+- `POST /api/chat` 可携带 `conversationId`；不传时根据首个问题自动创建新会话。
+- 后端生成 AST 时默认读取同一会话最近 6 轮，并将上一轮完整 AST 与 SQL 一并提供给模型。
+- 可通过 `app.chat-memory.recent-rounds` 调整上下文轮数，最大为 20。
+- `GET /api/conversations` 获取当前用户的历史会话。
+- `GET /api/conversations/{id}` 恢复一个会话的全部消息。
+- `DELETE /api/conversations/{id}` 删除会话及其消息。
+- 编辑历史问题时，前端传递 `replaceFromMessageId`，后端删除该消息及其后续分支，再生成新的回答。

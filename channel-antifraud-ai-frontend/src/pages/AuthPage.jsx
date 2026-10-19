@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Button, Form, Input, Segmented, Upload, message } from 'antd'
+import { Button, Form, Input, Upload, message } from 'antd'
 import {
-  SafetyCertificateOutlined,
   UserOutlined,
   MobileOutlined,
   LockOutlined,
@@ -9,6 +8,7 @@ import {
 } from '@ant-design/icons'
 import { login, register } from '../api/userService'
 import { resolveAvatar } from '../utils/avatars'
+import BrandIcon from '../components/BrandIcon'
 
 const PHONE_PATTERN = /^1[3-9]\d{9}$/
 
@@ -100,29 +100,14 @@ export default function AuthPage({ onLogin }) {
 
   return (
     <div className="auth-page">
-      {/* 背景装饰：纯线条，无渐变 */}
-      <span className="auth-deco auth-deco-ring-1" aria-hidden="true" />
-      <span className="auth-deco auth-deco-ring-2" aria-hidden="true" />
-      <span className="auth-deco auth-deco-square" aria-hidden="true" />
-
       <div className="auth-card">
         <div className="auth-brand">
           <div className="auth-brand-icon">
-            <SafetyCertificateOutlined />
+            <BrandIcon />
           </div>
-          <div className="auth-brand-title">渠道反欺诈 AI</div>
-          <div className="auth-brand-sub">一句话找客群</div>
+          <div className="auth-brand-title">AI Agent大数据智能查询系统</div>
+          <div className="auth-brand-sub">一句话查数据</div>
         </div>
-
-        <Segmented
-          block
-          value={mode}
-          onChange={switchMode}
-          options={[
-            { label: '登录', value: 'login' },
-            { label: '注册', value: 'register' },
-          ]}
-        />
 
         {mode === 'login' ? (
           <Form
@@ -133,18 +118,19 @@ export default function AuthPage({ onLogin }) {
             className="auth-form"
           >
             <Form.Item
-              label="手机号"
-              name="phone"
+              label="手机号或用户名"
+              name="account"
               rules={[
-                { required: true, message: '请输入手机号' },
-                { pattern: PHONE_PATTERN, message: '请输入正确的 11 位手机号' },
+                { required: true, whitespace: true, message: '请输入手机号或用户名' },
+                { max: 64, message: '账号不能超过 64 个字符' },
               ]}
             >
               <Input
                 size="large"
-                prefix={<MobileOutlined />}
-                placeholder="请输入手机号"
-                maxLength={11}
+                prefix={<UserOutlined />}
+                placeholder="请输入手机号或用户名"
+                maxLength={64}
+                autoComplete="username"
               />
             </Form.Item>
             <Form.Item
@@ -156,6 +142,7 @@ export default function AuthPage({ onLogin }) {
                 size="large"
                 prefix={<LockOutlined />}
                 placeholder="请输入密码"
+                autoComplete="current-password"
               />
             </Form.Item>
             <Button
@@ -209,6 +196,7 @@ export default function AuthPage({ onLogin }) {
                 prefix={<UserOutlined />}
                 placeholder="请输入用户名"
                 maxLength={20}
+                autoComplete="username"
               />
             </Form.Item>
             <Form.Item
@@ -224,6 +212,7 @@ export default function AuthPage({ onLogin }) {
                 prefix={<MobileOutlined />}
                 placeholder="请输入手机号"
                 maxLength={11}
+                autoComplete="tel"
               />
             </Form.Item>
             <Form.Item
@@ -238,6 +227,7 @@ export default function AuthPage({ onLogin }) {
                 size="large"
                 prefix={<LockOutlined />}
                 placeholder="请设置密码（至少 6 位）"
+                autoComplete="new-password"
               />
             </Form.Item>
             <Button
@@ -260,7 +250,7 @@ export default function AuthPage({ onLogin }) {
         )}
       </div>
 
-      <div className="auth-footer-note">渠道反欺诈 AI · 自然语言驱动的客群洞察</div>
+      <div className="auth-footer-note">AI Agent大数据智能查询系统 · 自然语言驱动的数据洞察</div>
     </div>
   )
 }

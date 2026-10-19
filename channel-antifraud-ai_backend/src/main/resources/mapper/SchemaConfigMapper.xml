@@ -38,6 +38,26 @@
             custom_comment = VALUES(custom_comment)
     </insert>
 
+    <insert id="upsertTableVisibilityBatch">
+        INSERT INTO schema_table_config
+            (database_type, table_name, visible, custom_comment)
+        VALUES
+        <foreach collection="tableNames" item="tableName" separator=",">
+            (#{databaseType}, #{tableName}, #{visible}, NULL)
+        </foreach>
+        ON DUPLICATE KEY UPDATE visible = VALUES(visible)
+    </insert>
+
+    <insert id="upsertFieldVisibilityBatch">
+        INSERT INTO schema_field_config
+            (database_type, table_name, field_name, visible, custom_comment)
+        VALUES
+        <foreach collection="fieldNames" item="fieldName" separator=",">
+            (#{databaseType}, #{tableName}, #{fieldName}, #{visible}, NULL)
+        </foreach>
+        ON DUPLICATE KEY UPDATE visible = VALUES(visible)
+    </insert>
+
     <select id="selectTableRules" resultMap="tableRuleMap">
         SELECT table_name, visible, custom_comment
         FROM schema_table_config

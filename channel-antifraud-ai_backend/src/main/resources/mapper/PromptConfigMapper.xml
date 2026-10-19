@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xym.antifraud.mapper.PromptConfigMapper">
+
+    <resultMap id="promptConfigMap" type="com.xym.antifraud.entity.PromptConfig">
+        <id property="id" column="id"/>
+        <result property="databaseType" column="database_type"/>
+        <result property="content" column="content"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByDatabaseType" resultMap="promptConfigMap">
+        SELECT id, database_type, content, updated_at
+        FROM text2sql_prompt_config
+        WHERE database_type = #{databaseType}
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO text2sql_prompt_config (database_type, content)
+        VALUES (#{databaseType}, #{content})
+        ON DUPLICATE KEY UPDATE
+            content = VALUES(content),
+            updated_at = CURRENT_TIMESTAMP
+    </insert>
+
+    <delete id="deleteByDatabaseType">
+        DELETE FROM text2sql_prompt_config
+        WHERE database_type = #{databaseType}
+    </delete>
+</mapper>

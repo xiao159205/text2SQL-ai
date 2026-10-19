@@ -39,6 +39,25 @@ export function saveFieldRule(database, tableName, fieldName, { visible, comment
   )
 }
 
+/** 批量设置当前筛选结果中的表为白名单或黑名单。 */
+export function saveTableVisibilityBatch(database, tableNames, visible) {
+  return request('/api/schema-config/tables/batch-visibility', {
+    method: 'PUT',
+    body: JSON.stringify({ database, tableNames, visible }),
+  })
+}
+
+/** 批量设置指定表的字段为白名单或黑名单。 */
+export function saveFieldVisibilityBatch(database, tableName, fieldNames, visible) {
+  return request(
+    `/api/schema-config/tables/${encodeURIComponent(tableName)}/fields/batch-visibility`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ database, fieldNames, visible }),
+    },
+  )
+}
+
 /** 预览当前生效的、发给大模型的 Schema 文本。 */
 export function fetchPromptPreview(database) {
   return request(`/api/schema-config/prompt-preview?database=${database}`)

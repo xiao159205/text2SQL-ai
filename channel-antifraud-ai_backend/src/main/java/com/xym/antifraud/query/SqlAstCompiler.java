@@ -115,10 +115,31 @@ public class SqlAstCompiler {
     private String compileSelect(SqlQueryPlan.SelectItem item, Map<String, String> scope) {
         SchemaCatalog.ResolvedField resolved = catalog.resolveField(item.field(), scope);
         String expression = aggregateExpression(item.aggregate(), qualifiedField(resolved));
-        if (item.alias() != null && !item.alias().isBlank()) {
+        if (item.aggregate() != null && item.aggregate() != Aggregate.NONE) {
+            // 聚合列强制加确定性别名，让结果列名与前端 dataIndex 完全一致，
+            // 避免依赖 MySQL 对 SUM(x)/COUNT(x) 等表达式的返回命名。
+            expression += " AS " + quoteIdentifier(
+                    outputColumnName(item.aggregate(), item.alias(), resolved.field().columnName()));
+        } else if (item.alias() != null && !item.alias().isBlank()) {
             expression += " AS " + quoteIdentifier(item.alias());
         }
         return expression;
+    }
+
+    /**
+     * 计算 SELECT 结果列在结果集中的最终列名，与 {@link #compileSelect} 强制加的别名保持一致，
+     * 供前端表格/图表的 dataIndex 复用。显式别名优先；普通字段用列名；聚合字段用「聚合名_列名」，
+     * 避免与 MySQL 的表达式命名（如 {@code SUM(amount)}）耦合。
+     */
+    public static String outputColumnName(SqlQueryPlan.Aggregate aggregate,
+                                          String alias, String columnName) {
+        if (alias != null && !alias.isBlank()) {
+            return alias;
+        }
+        if (aggregate == null || aggregate == Aggregate.NONE) {
+            return columnName;
+        }
+        return aggregate.name() + "_" + columnName;
     }
 
     private String compileCondition(SqlQueryPlan.Condition condition, Map<String, String> scope,

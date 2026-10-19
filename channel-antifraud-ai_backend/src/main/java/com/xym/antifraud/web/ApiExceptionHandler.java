@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -42,6 +43,16 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of(
                 "code", "INVALID_REQUEST",
                 "message", message == null ? "请求参数错误" : message
+        ));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleUnreadableRequest(
+            HttpMessageNotReadableException exception) {
+        log.warn("[请求失败-JSON参数无法解析] message={}", exception.getMessage());
+        return ResponseEntity.badRequest().body(Map.of(
+                "code", "INVALID_REQUEST",
+                "message", "请求参数格式错误"
         ));
     }
 
